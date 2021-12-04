@@ -1,10 +1,4 @@
-from notears.locally_connected import LocallyConnected
-from notears.lbfgsb_scipy import LBFGSBScipy
-from notears.trace_expm import trace_expm
-import torch
-import torch.nn as nn
-import numpy as np
-import math
+
 
 from notears.locally_connected import LocallyConnected
 from notears.lbfgsb_scipy import LBFGSBScipy
@@ -13,11 +7,14 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pandas as pd
-import math
 import notears.utils as ut
 from ax.service.managed_loop import optimize
 
 from metric import MetricsDAG
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print('\nUsing device: {}\n'.format(device))
+
 class NotearsMLP(nn.Module):
     def __init__(self, dims, bias=True):
         super(NotearsMLP, self).__init__()
@@ -49,10 +46,10 @@ class NotearsMLP(nn.Module):
                     bounds.append(bound)
         return bounds
 
-    def forward(self, x):  # [n, d] -> [n, d]
-        x = self.fc1_pos(x) - self.fc1_neg(x)  # [n, d * m1]
+    def forward(self, x, device):  # [n, d] -> [n, d]
+        x = self.fc1_pos.to(device)(x) - self.fc1_neg.to(device)(x)  # [n, d * m1]
         x = x.view(-1, self.dims[0], self.dims[1])  # [n, d, m1]
-        for fc in self.fc2:
+        for fc in self.fc2.to(device):
             x = torch.sigmoid(x)  # [n, d, m1]
             x = fc(x)  # [n, d, m2]
         x = x.squeeze(dim=2)  # [n, d]
@@ -64,6 +61,7 @@ class NotearsMLP(nn.Module):
         fc1_weight = self.fc1_pos.weight - self.fc1_neg.weight  # [j * m1, i]
         fc1_weight = fc1_weight.view(d, -1, d)  # [j, m1, i]
         A = torch.sum(fc1_weight * fc1_weight, dim=1).t()  # [i, j]
+        A = A.cpu()
         h = trace_expm(A) - d  # (Zheng et al. 2018)
         # A different formulation, slightly faster at the cost of numerical stability
         # M = torch.eye(d) + A / d  # (Yu et al. 2019)
@@ -115,12 +113,13 @@ def dual_ascent_step(model, X, lambda1, lambda2, rho, alpha, h, rho_max):
     """Perform one step of dual ascent in augmented Lagrangian."""
     h_new = None
     optimizer = LBFGSBScipy(model.parameters())
-    X_torch = torch.from_numpy(X)
+    X_torch = torch.from_numpy(X).to(device)
     while rho < rho_max:
         def closure():
             optimizer.zero_grad()
-            X_hat = model(X_torch)
+            X_hat = model(X_torch, device)
             loss = squared_loss(X_hat, X_torch)
+            print(loss)
             h_val = model.h_func()
             penalty = 0.5 * rho * h_val * h_val + alpha * h_val
             l2_reg = 0.5 * lambda2 * model.l2_reg()
@@ -193,7 +192,7 @@ def train_evaluate(parameterization: dict):
     # lambda2: float = 0.,
     # max_iter: int = 100,
     # h_tol: float = 1e-8,
-    # rho_max: float = 1e+16,
+    # rho_max: float = 1e
     # w_threshold: float = 0.3):
     W_est = notears_nonlinear(model,
                               X,
