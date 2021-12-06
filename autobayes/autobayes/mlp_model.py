@@ -119,7 +119,6 @@ def dual_ascent_step(model, X, lambda1, lambda2, rho, alpha, h, rho_max):
             optimizer.zero_grad()
             X_hat = model(X_torch, device)
             loss = squared_loss(X_hat, X_torch)
-            print(loss)
             h_val = model.h_func()
             penalty = 0.5 * rho * h_val * h_val + alpha * h_val
             l2_reg = 0.5 * lambda2 * model.l2_reg()
