@@ -57,7 +57,12 @@ def graph_estimator(train, parameterization):
 
 def train_evaluate_no_csv_given_parameter_config(parameterization: dict):
     train=data.sample(frac=0.8,random_state=200) #random state is a seed value
+    train_mean = data.mean()
+    train_std = train.std()
+    train = (train - train_mean) / train_std
+    
     test=data.drop(train.index)
+    test = (test - train_mean) / train_std
 
             # 1. Find the estiamte dgraph using inner fold training data
     weight_estimated = graph_estimator(train, parameterization)
@@ -74,7 +79,7 @@ def train_evaluate_no_csv_given_parameter_config(parameterization: dict):
                 continue
         train_x, train_y = train.loc[:, markov_blanket], train.loc[:, node]
         test_x, test_y = test.loc[:, markov_blanket], test.loc[:, node]
-            
+        
         model = LinearRegression()
         model.fit(train_x, train_y)
         print(f'Coefficients = {model.coef_}')
@@ -96,7 +101,12 @@ def train_evaluate_given_parameter_config(parameterization: dict):
     folds_score = []
     for train_idx, test_idx in kfold.split(data):
         train, test = data.iloc[train_idx, :], data.iloc[test_idx, :]
+        train_mean = data.mean()
+        train_std = train.std()
+        train = (train - train_mean) / train_std
 
+        test=data.drop(train.index)
+        test = (test - train_mean) / train_std
         # 1. Find the estiamte dgraph using inner fold training data
         weight_estimated = graph_estimator(train, parameterization)
         sm = nx.convert_matrix.from_numpy_array(weight_estimated != 0)
