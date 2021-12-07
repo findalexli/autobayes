@@ -40,7 +40,8 @@ def graph_estimator(train, parameterization):
     torch.set_default_dtype(torch.double)
 
     d= len(train.columns)
-    model = NotearsMLP(dims=[d, 10, 1], bias=True)
+    hidden_number_of_nodes = parameterization['nodes']
+    model = NotearsMLP(dims=[d, hidden_number_of_nodes, 1], bias=True)
     global W_est
     W_est = notears_nonlinear(model,
                           train.to_numpy(), # Change to train
@@ -73,20 +74,23 @@ def train_evaluate_no_csv_given_parameter_config(parameterization: dict):
                 continue
         train_x, train_y = train.loc[:, markov_blanket], train.loc[:, node]
         test_x, test_y = test.loc[:, markov_blanket], test.loc[:, node]
-        train_pool = Pool(train_x, train_y)
-
-        model = CatBoostRegressor(verbose=False)
-        model.fit(train_pool)
-        mse = mean_squared_error(model.predict(test_x), test_y, squared=False)
-        print(f'RMSE at Node {node} is = {mse}')
-        score_list.append(mse)
+            
+        model = LinearRegressor()
+        model.fit(train_x, train_y)
+        print(f'Coefficients = {model.coef_}')
+        rmse = mean_squared_error(model.predict(test_x), test_y, squared=False)
+        # Get number of coefficients 
+        weak_correlated_count = (np.abs(model.coef_) < 0.15).sum()
+        adjusted_rmse = rmse + 0.3 * weak_correlated_count
+        print(f'Weak correlated count {weak_correlated_count}')
+        score_list.append(adjusted_rmse)
+        print(f'MSE at Node {node} is = {rmse}')
+        score_list.append(rmse)
     if len(score_list) <=1:
         return None
     avg_score = np.mean(score_list)
     print('Average Score across nodes {avg_score}')
     return avg_score
-
-
 
 def train_evaluate_given_parameter_config(parameterization: dict):
     kfold = KFold(n_splits=3, shuffle=True)
@@ -105,18 +109,23 @@ def train_evaluate_given_parameter_config(parameterization: dict):
         score_list = []
         for node in nodes:
             markov_blanket = bn.get_markov_blanket(node)
-            if len(markov_blanket) <=1:
+            if len(markov_blanket) <1:
                 continue
             train_x, train_y = train.loc[:, markov_blanket], train.loc[:, node]
             test_x, test_y = test.loc[:, markov_blanket], test.loc[:, node]
             
-            
-            model = LinearRegressor()
+            LinearRegression
+            model = LinearRegression()
             model.fit(train_x, train_y)
             print(f'Coefficients = {model.coef_}')
-            mse = mean_squared_error(model.predict(test_x), test_y, squared=False)
-            print(f'MSE at Node {node} is = {mse}')
-            score_list.append(mse)
+            rmse = mean_squared_error(model.predict(test_x), test_y, squared=False)
+            print(f'MSE at Node {node} is = {rmse}')
+            
+            # Get number of coefficients 
+            weak_correlated_count = (np.abs(model.coef_) < 0.15).sum()
+            adjusted_rmse = rmse + 0.3 * weak_correlated_count
+            print(f'Weak correlated count {weak_correlated_count}')
+            score_list.append(adjusted_rmse)
         # 3. Average fold score of average score across nodes
         fold_score = np.mean(score_list)
         folds_score.append(fold_score)
@@ -134,21 +143,24 @@ def bayesian_optimize(data, cross_validated):
             parameters=[
               {
                 "name": "lambda1",
-                "type": "range",
-                "bounds": [0.01, 0.5],
-                "log_scale": True
+                "type": "fixed",
+                "value": 0.03,
               },
               {
                  "name": "lambda2",
-                 "type": "range",
-                 "bounds": [0.01, 0.5],
-                 "log_scale": True
+                 "type": "fixed",
+                 "value": 0.03,
               },
               {
                   "name": "w_threshold",
                   "type": "range",
-                  "bounds": [0.01, 0.7],
-                  "log_scale": True
+                  "bounds": [0.01, 0.5],
+                  "log_scale": False
+               }, 
+               {
+                  "name": "nodes",
+                  "type": "fixed",
+                  "value": 10,
                }
             ],
             # Booth function
@@ -175,10 +187,10 @@ def data_given_setup(setup):
     data = pd.DataFrame(ut.simulate_nonlinear_sem(W_true, setup['n'], setup['sem_type']))
     return data, W_true
 
-def main(stimulated =False, test=True, cross_validated=False):
+def main(stimulated =True, test=False, cross_validated=False):
     if stimulated: 
 
-        setup = {'n': 1000, 'graph_type': 'ER', 'sem_type':'gp'} # Default
+        setup = {'n': 200, 'graph_type': 'ER', 'sem_type':'gp'} # Default
         setup['sem_type'] = sys.argv[1]
         setup['er_multiplier'] = int(sys.argv[2])
         d_list = [10, 20, 30, 40]
