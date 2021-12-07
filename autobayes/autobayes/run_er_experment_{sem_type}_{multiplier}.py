@@ -158,8 +158,8 @@ def bayesian_optimize(data, cross_validated):
                }, 
                {
                   "name": "nodes",
-                  "type": "fixed",
-                  "value": 10,
+                  "type": "range",
+                  "bounds": [10, 30],
                }
             ],
             # Booth function
