@@ -57,11 +57,11 @@ def graph_estimator(train, parameterization):
 
 def train_evaluate_no_csv_given_parameter_config(parameterization: dict):
     train=data.sample(frac=0.8,random_state=200) #random state is a seed value
-    test=dasta.drop(train.index)
+    test=data.drop(train.index)
 
             # 1. Find the estiamte dgraph using inner fold training data
     weight_estimated = graph_estimator(train, parameterization)
-    sm = nx.convert_matrix.from_numpy_array(W_est != 0)
+    sm = nx.convert_matrix.from_numpy_array(weight_estimated != 0)
 
     bn = BayesianModel()
     bn.add_edges_from(sm.edges)
@@ -70,12 +70,12 @@ def train_evaluate_no_csv_given_parameter_config(parameterization: dict):
     score_list = []
     for node in nodes:
         markov_blanket = bn.get_markov_blanket(node)
-        if len(markov_blanket) <=1:
+        if len(markov_blanket) <1:
                 continue
         train_x, train_y = train.loc[:, markov_blanket], train.loc[:, node]
         test_x, test_y = test.loc[:, markov_blanket], test.loc[:, node]
             
-        model = LinearRegressor()
+        model = LinearRegression()
         model.fit(train_x, train_y)
         print(f'Coefficients = {model.coef_}')
         rmse = mean_squared_error(model.predict(test_x), test_y, squared=False)
@@ -85,7 +85,6 @@ def train_evaluate_no_csv_given_parameter_config(parameterization: dict):
         print(f'Weak correlated count {weak_correlated_count}')
         score_list.append(adjusted_rmse)
         print(f'MSE at Node {node} is = {rmse}')
-        score_list.append(rmse)
     if len(score_list) <=1:
         return None
     avg_score = np.mean(score_list)
@@ -100,7 +99,7 @@ def train_evaluate_given_parameter_config(parameterization: dict):
 
         # 1. Find the estiamte dgraph using inner fold training data
         weight_estimated = graph_estimator(train, parameterization)
-        sm = nx.convert_matrix.from_numpy_array(W_est != 0)
+        sm = nx.convert_matrix.from_numpy_array(weight_estimated != 0)
 
         bn = BayesianModel()
         bn.add_edges_from(sm.edges)
@@ -164,7 +163,8 @@ def bayesian_optimize(data, cross_validated):
                }
             ],
             # Booth function
-            evaluation_function=train_evaluate_given_parameter_config,
+            evaluation_function=eval_function,
+            total_trials=10,
             minimize=True,
         )
     return best_parameters, best_values, experiment, model
@@ -225,7 +225,6 @@ def main(stimulated =True, test=False, cross_validated=False):
         log = {'W_estimated': W_estimated, 'best_parameters': best_parameters, 'best_values': best_values}
         with open('data_saches.json', 'w') as outfile:
             json.dump(log, outfile)
-        print(ut.is_dag(W_est))
 
     
 if __name__ == "__main__":
